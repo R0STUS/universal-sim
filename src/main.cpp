@@ -44,15 +44,24 @@ struct Planet {
     double civil;
 };
 
+struct Tag {
+    std::string name;
+    std::vector<Tag> meta;
+    long intValue;
+    std::string strValue;
+    bool boolValue;
+};
+
 struct Object {
     long id;
     Position pos;
     std::vector<Planet> planets;
     double weight;
     double meteoriteChance;
-    std::vector<Civilisation> civilisations;
+    Civilisation civilisation;
     bool isInfinityWeight;
     Velocity vel;
+    std::vector<Tag> tags;
 };
 
 Velocity computeVelocity(Position p) {
@@ -112,7 +121,7 @@ std::vector<Object> generateUniverse() {
     for (long i = 0; i < maxObjects; i++) {
         result.push_back({i});
         dir = random(720);
-        result[i].pos = {(std::sin(dir) * random(250)) * 2, (std::cos(dir) * random(250)) * 2};
+        result[i].pos = {(std::sin(dir) * random(500)) * 2, (std::cos(dir) * random(500)) * 2};
         result[i].weight = random(1000) * 0.75;
         if (result[i].weight >= 745) {
             result[i].weight = 1024 * 86;
@@ -124,9 +133,10 @@ std::vector<Object> generateUniverse() {
         else
             result[i].isInfinityWeight = false;
         if (result[i].isInfinityWeight == false) {
+            result[i].civilisation = {0.5, 0.5, 0.5, 0.5, 0.5};
             int planetsTotal = (random(10) + 1) * (result[i].weight * 0.0075);
             for (int ii = 0; ii < planetsTotal; ii++) {
-                result[i].planets.push_back({ii, random(200) * 0.01, random(200) * 0.01, random(200) * 0.01, random(200) * 0.01});
+                result[i].planets.push_back({ii, random(200) * 0.01, random(result[i].weight * 0.5) * 0.01, random(200) * 0.01, random(200) * 0.01, 0});
             }
             if (result[i].planets.size() == 1) {
                 out(funcType, "Object " + std::to_string(i) + " is single-planet.", "debug");
@@ -143,6 +153,7 @@ std::vector<Object> generateUniverse() {
 
 int main() {
     std::srand(static_cast<unsigned int>(std::time(0)));
+    double k = 1;//0.00000000000000025
     std::string funcType = "MAIN";
     out(funcType, "Initialising universe...", "info");
     std::vector<Object> objects = generateUniverse();
@@ -175,11 +186,15 @@ int main() {
                         double dist = std::pow(distance, 2) * 10;
                         if (dist < 1)
                             dist = 1;
-                        if (obj.weight > targ.weight) {
-                            force = ((targ.weight / (obj.weight * 500)) / dist) * 0.00000000000000025;//0.00000000000000025
+                        /*if (obj.weight > targ.weight) {
+                            force = ((targ.weight / (obj.weight * 500)) / dist) * 0.00000000025;
                         }
                         else
-                            force = ((obj.weight * (targ.weight * 500)) / dist) * 0.00000000000000025;
+                            force = ((obj.weight * (targ.weight * 500)) / dist) * 0.00000000025;*/
+                        force = ((targ.weight / dist) / obj.weight) * k;
+                        if (obj.tags.size() > 1 && obj.tags[1].name == "ship" && obj.tags[1].meta[0].name == "target" && obj.tags[1].meta[0].intValue == targ.id) {
+                            force += 0.01 * k;
+                        }
                         obj.vel.x += force * (deltaPosX / distance);
                         obj.vel.y += force * (deltaPosY / distance);
                     }
@@ -189,12 +204,16 @@ int main() {
                     }
                     if (isInRadius(targ.pos, obj.pos, radius)) {
                         bool isDeleteAttent = false;
+                        bool isShip = false;
                         bool uped = false;
                         if (objects[j].id > objects[i].id) {
                             isDeleteAttent = true;
                         }
                         bool firstDeleted = false;
                         if (!obj.isInfinityWeight) {
+                            if (obj.tags.size() > 1 && obj.tags[1].name == "ship" && obj.tags[1].meta[0].name == "target" && obj.tags[1].meta[0].intValue == targ.id) {
+                                isShip = 1;
+                            }
                             objects.erase(std::remove_if(objects.begin(), objects.end(), [&obj](const Object& o) { return o.id == obj.id; }), objects.end());
                             isInRadiusNow = true;
                             break;
@@ -220,11 +239,23 @@ int main() {
                         }
                         if (!objects[j].isInfinityWeight && !uped) {
                             if (firstDeleted == false || isDeleteAttent == false) {
-                                objects.erase(std::remove_if(objects.begin(), objects.end(), [&targ](const Object& o) { return o.id == targ.id; }), objects.end());
+                                if (isShip) {
+                                    for (size_t p = 0; p < objects[j].planets.size(); ++p) {
+                                        objects[j].planets[p].civil += 2.5;
+                                    }
+                                }
+                                else
+                                    objects.erase(std::remove_if(objects.begin(), objects.end(), [&targ](const Object& o) { return o.id == targ.id; }), objects.end());
                                 break;
                             }
                             else {
-                                objects.erase(std::remove_if(objects.begin(), objects.end(), [&targ](const Object& o) { return o.id == targ.id; }), objects.end());
+                                if (isShip) {
+                                    for (size_t p = 0; p < objects[j].planets.size(); ++p) {
+                                        objects[j + 1].planets[p].civil += 2.5;
+                                    }
+                                }
+                                else
+                                    objects.erase(std::remove_if(objects.begin(), objects.end(), [&targ](const Object& o) { return o.id == targ.id; }), objects.end());
                                 break;
                             }
                         }
@@ -272,12 +303,12 @@ int main() {
             if (!isInRadiusNow) {
                 obj.pos.x += obj.vel.x;
                 obj.pos.y += obj.vel.y;
-                if (objects[i].pos.x > 2000 || objects[i].pos.x < -2000) {
+                if (objects[i].pos.x > 4000 || objects[i].pos.x < -4000) {
                     objects.erase(std::remove_if(objects.begin(), objects.end(), [&objects, &i](const Object& o) { return o.id == objects[i].id; }), objects.end());
                     isInRadiusNow = true;
                     out(funcType, "Object " + std::to_string(obj.id) + " has flown to outer space.", "info");
                 }
-                if (objects[i].pos.y > 1000 || objects[i].pos.y < -1000) {
+                if (objects[i].pos.y > 2000 || objects[i].pos.y < -2000) {
                     objects.erase(std::remove_if(objects.begin(), objects.end(), [&objects, &i](const Object& o) { return o.id == objects[i].id; }), objects.end());
                     isInRadiusNow = true;
                     out(funcType, "Object " + std::to_string(obj.id) + " has flown to outer space.", "info");
@@ -293,6 +324,10 @@ int main() {
                         circle.setOutlineThickness(2.5);
                         circle.setOutlineColor(sf::Color(100, 0, 0));
 
+                        if (objects[i].tags.size() > 1 && objects[i].tags[1].name == "ship") {
+                            circle.setOutlineColor(sf::Color(0, 200, 0));
+                        }
+
                     if (objects[i].isInfinityWeight) {
                         radius *= 0.25;
                         circle.setFillColor(sf::Color(0, 0, 1));
@@ -302,6 +337,22 @@ int main() {
                     circle.setRadius(radius);
                     circle.setPosition((objects[i].pos.x + 1000) - radius, (objects[i].pos.y + 500) - radius);
                     window.draw(circle);
+                    if (!objects[i].isInfinityWeight && objects[i].tags.size() < 1) {
+                        for (auto& p : objects[i].planets) {
+                            p.civil += (p.civilChance * (((p.civilSpeed * p.water) / (p.temperature * 0.5)) * ((p.civil + 0.001) * 0.5))) * (0.0025 * k);
+                            if (p.civil >= 10) {
+                                p.civil -= 9.5;
+                                long biggest = 0;
+                                for (auto objB : objects) {
+                                    if (objB.id > biggest) {
+                                        biggest = objB.id;
+                                    }
+                                }
+                                biggest++;
+                                objects.push_back({biggest, objects[i].pos, {}, 75, 0.1, objects[i].civilisation, 0, {0, 0}, {{"noPlanets"}, {"ship", {{"target", {}, random(objects.size())}}}}});
+                            }
+                        }
+                    }
                 }
             }
         }
